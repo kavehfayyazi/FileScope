@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -45,18 +45,28 @@ ipcMain.handle('select-folder', async () => {
 ipcMain.handle('read-directory', async (_event, dirPath) => {
   try {
     const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
-    const items = entries
-      .filter((e) => !e.name.startsWith('.'))
-      .map((e) => ({
-        name: e.name,
-        path: path.join(dirPath, e.name),
-        isDirectory: e.isDirectory(),
-      }));
-    items.sort((a, b) => {
-      if (a.isDirectory && !b.isDirectory) return -1;
-      if (!a.isDirectory && b.isDirectory) return 1;
-      return a.name.localeCompare(b.name);
-    });
+    const items = await Promise.all(
+      entries
+        .filter((e) => !e.name.startsWith('.'))
+        .map(async (e) => {
+          const fullPath = path.join(dirPath, e.name);
+          const isDir = e.isDirectory();
+          let size = 0;
+          let mtime = 0;
+          try {
+            const st = await fs.promises.stat(fullPath);
+            size = st.size;
+            mtime = st.mtimeMs;
+          } catch {}
+          return {
+            name: e.name,
+            path: fullPath,
+            isDirectory: isDir,
+            size,
+            mtime,
+          };
+        })
+    );
     return items;
   } catch {
     return [];
@@ -67,14 +77,34 @@ ipcMain.handle('read-file', async (_event, filePath) => {
   try {
     const stat = await fs.promises.stat(filePath);
     const ext = path.extname(filePath).toLowerCase();
-    const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'];
-    const videoExts = ['.mp4', '.webm', '.ogg', '.mov'];
-    const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a'];
+
+    const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.ico', '.tiff', '.avif'];
+    const videoExts = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv'];
+    const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma'];
     const pdfExts = ['.pdf'];
+    const markdownExts = ['.md', '.mdx', '.markdown'];
+    const csvExts = ['.csv', '.tsv'];
+    const jsonExts = ['.json', '.jsonc', '.geojson'];
+    const svgExts = ['.svg'];
+    const fontExts = ['.ttf', '.otf', '.woff', '.woff2'];
+    const officeExts = ['.docx', '.xlsx', '.pptx', '.doc', '.xls', '.ppt', '.odt', '.ods'];
+    const codeExts = [
+      '.js', '.ts', '.jsx', '.tsx', '.py', '.rb', '.go', '.rs', '.c', '.cpp', '.h', '.hpp',
+      '.java', '.swift', '.sh', '.bash', '.zsh', '.sql', '.css', '.scss', '.less',
+      '.html', '.htm', '.xml', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
+      '.php', '.kt', '.kts', '.cs', '.lua', '.r', '.m', '.mm', '.pl', '.pm',
+      '.ex', '.exs', '.erl', '.hs', '.ml', '.scala', '.groovy', '.dart',
+      '.vue', '.svelte', '.astro', '.tf', '.dockerfile', '.makefile',
+    ];
+
+    if (svgExts.includes(ext)) {
+      const data = await fs.promises.readFile(filePath, 'utf-8');
+      return { type: 'svg', data, size: stat.size };
+    }
 
     if (imageExts.includes(ext)) {
       const data = await fs.promises.readFile(filePath);
-      const mime = ext === '.svg' ? 'image/svg+xml' : `image/${ext.slice(1).replace('jpg', 'jpeg')}`;
+      const mime = `image/${ext.slice(1).replace('jpg', 'jpeg')}`;
       return { type: 'image', data: `data:${mime};base64,${data.toString('base64')}`, size: stat.size };
     }
 
@@ -88,11 +118,21 @@ ipcMain.handle('read-file', async (_event, filePath) => {
 
     if (pdfExts.includes(ext)) {
       const data = await fs.promises.readFile(filePath);
-      return { type: 'pdf', data: `data:application/pdf;base64,${data.toString('base64')}`, size: stat.size };
+      return { type: 'pdf', data: data.toString('base64'), size: stat.size };
     }
 
-    // Try reading as text — bail if binary
-    if (stat.size > 5 * 1024 * 1024) {
+    if (fontExts.includes(ext)) {
+      const data = await fs.promises.readFile(filePath);
+      const mimeMap = { '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2' };
+      return { type: 'font', data: `data:${mimeMap[ext]};base64,${data.toString('base64')}`, size: stat.size };
+    }
+
+    if (officeExts.includes(ext)) {
+      return { type: 'office', data: null, size: stat.size, ext };
+    }
+
+    // Text-based types (need to read content)
+    if (stat.size > 10 * 1024 * 1024) {
       return { type: 'binary', data: null, size: stat.size };
     }
 
@@ -102,7 +142,32 @@ ipcMain.handle('read-file', async (_event, filePath) => {
       return { type: 'binary', data: null, size: stat.size };
     }
 
-    return { type: 'text', data: buf.toString('utf-8'), size: stat.size };
+    const text = buf.toString('utf-8');
+
+    if (markdownExts.includes(ext)) {
+      return { type: 'markdown', data: text, size: stat.size };
+    }
+
+    if (jsonExts.includes(ext)) {
+      return { type: 'json', data: text, size: stat.size };
+    }
+
+    if (csvExts.includes(ext)) {
+      return { type: 'csv', data: text, size: stat.size, delimiter: ext === '.tsv' ? '\t' : ',' };
+    }
+
+    if (codeExts.includes(ext)) {
+      return { type: 'code', data: text, size: stat.size, ext };
+    }
+
+    // Check if basename matches known code files without extension
+    const basename = path.basename(filePath).toLowerCase();
+    const codeNames = ['makefile', 'dockerfile', 'vagrantfile', 'gemfile', 'rakefile', '.gitignore', '.env'];
+    if (codeNames.includes(basename)) {
+      return { type: 'code', data: text, size: stat.size, ext: '' };
+    }
+
+    return { type: 'text', data: text, size: stat.size };
   } catch (err) {
     return { type: 'error', data: err.message, size: 0 };
   }
@@ -130,6 +195,36 @@ ipcMain.handle('move-file', async (_event, srcPath) => {
   } catch (err) {
     return { success: false, error: err.message };
   }
+});
+
+ipcMain.handle('rename-file', async (_event, filePath, newName) => {
+  try {
+    const dir = path.dirname(filePath);
+    const newPath = path.join(dir, newName);
+    await fs.promises.rename(filePath, newPath);
+    return { success: true, newPath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('copy-to-clipboard', async (_event, text) => {
+  clipboard.writeText(text);
+  return { success: true };
+});
+
+ipcMain.handle('open-in-default-app', async (_event, filePath) => {
+  try {
+    await shell.openPath(filePath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('show-in-finder', async (_event, filePath) => {
+  shell.showItemInFolder(filePath);
+  return { success: true };
 });
 
 ipcMain.handle('get-home-dir', () => app.getPath('home'));

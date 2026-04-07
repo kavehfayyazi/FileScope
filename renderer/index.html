@@ -2,19 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' file:; object-src 'self' data:; script-src 'self';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' file:; object-src 'self' data:; script-src 'self'; worker-src 'self' blob:; font-src 'self' data:;" />
   <title>FileScope</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="lib/github-dark.min.css" />
+  <script src="lib/hljs-bundle.js"></script>
+  <script src="lib/marked.umd.js"></script>
 </head>
 <body>
   <div id="app">
     <!-- Sidebar -->
     <aside id="sidebar">
       <div id="sidebar-header">
-        <button id="btn-open-folder" title="Open Folder">📂 Open Folder</button>
+        <button id="btn-open-folder" title="Open Folder">Open Folder</button>
         <span id="current-folder-name"></span>
       </div>
       <div id="breadcrumbs"></div>
+      <div id="sort-bar">
+        <select id="sort-select">
+          <option value="name-asc">Name A–Z</option>
+          <option value="name-desc">Name Z–A</option>
+          <option value="type">Type</option>
+          <option value="size-asc">Size ↑</option>
+          <option value="size-desc">Size ↓</option>
+          <option value="date-desc">Newest</option>
+          <option value="date-asc">Oldest</option>
+        </select>
+        <label id="folders-first-label">
+          <input type="checkbox" id="folders-first" checked /> Folders first
+        </label>
+      </div>
       <ul id="file-tree"></ul>
     </aside>
 
@@ -26,10 +43,18 @@
       <div id="viewer-empty">
         <p>Select a file to preview</p>
       </div>
+      <div id="viewer-actions" class="hidden">
+        <button id="action-open" title="Open in default application">Open Externally</button>
+        <button id="action-finder" title="Reveal in Finder">Show in Finder</button>
+        <button id="action-copy-path" title="Copy file path to clipboard">Copy Path</button>
+        <button id="action-rename" title="Rename this file">Rename</button>
+        <button id="action-move" title="Move to another folder">Move</button>
+        <button id="action-delete" class="danger" title="Move to Trash">Delete</button>
+      </div>
       <div id="viewer-content" class="hidden"></div>
     </main>
   </div>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

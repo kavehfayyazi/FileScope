@@ -4,6 +4,7 @@
   "description": "A desktop file viewer with directory browser, file preview, and file management",
   "main": "main.js",
   "scripts": {
+    "postinstall": "node scripts/copy-vendor.js && node scripts/bundle-hljs.js",
     "start": "electron .",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
@@ -38,5 +39,10 @@
   "devDependencies": {
     "electron": "^41.1.1",
     "electron-builder": "^26.8.1"
+  },
+  "dependencies": {
+    "highlight.js": "^11.11.1",
+    "marked": "^18.0.0",
+    "pdfjs-dist": "^5.6.205"
   }
 }
