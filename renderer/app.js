@@ -22,7 +22,6 @@ let rootDir = null;
 let currentDir = null;
 let selectedPath = null;       // single file shown in viewer
 let selectedPaths = new Set();  // multi-select set
-let lastClickedIndex = -1;     // for shift-click range selection
 let cachedItems = [];           // cached directory listing for re-sorting
 let sortedItems = [];           // current sorted view (for shift-click indexing)
 let fontCounter = 0;
@@ -167,42 +166,32 @@ function renderTree(items) {
       <button class="btn-overflow" title="Actions">⋯</button>
     `;
 
-    // Click handling with multi-select
+    // Click handling — Cmd/Ctrl/Shift all toggle individually (no range select)
     li.addEventListener('click', (e) => {
       if (e.target.closest('.btn-overflow')) return;
 
-      const isMeta = e.metaKey || e.ctrlKey;
-      const isShift = e.shiftKey;
+      const isModifier = e.metaKey || e.ctrlKey || e.shiftKey;
 
-      if (item.isDirectory && !isMeta && !isShift) {
+      if (item.isDirectory && !isModifier) {
         selectedPaths.clear();
         updateSelectionUI();
         navigateTo(item.path);
         return;
       }
 
-      if (isShift && lastClickedIndex >= 0) {
-        // Range select
-        const start = Math.min(lastClickedIndex, idx);
-        const end = Math.max(lastClickedIndex, idx);
-        if (!isMeta) selectedPaths.clear();
-        for (let i = start; i <= end; i++) {
-          selectedPaths.add(items[i].path);
-        }
-      } else if (isMeta) {
-        // Toggle single item
+      if (isModifier) {
+        // Toggle this item
         if (selectedPaths.has(item.path)) {
           selectedPaths.delete(item.path);
         } else {
           selectedPaths.add(item.path);
         }
       } else {
-        // Normal click — single select
+        // Plain click — single select
         selectedPaths.clear();
         selectedPaths.add(item.path);
       }
 
-      lastClickedIndex = idx;
       updateSelectionUI();
 
       // Preview the last clicked file (if not a directory)
@@ -218,7 +207,6 @@ function renderTree(items) {
       if (!selectedPaths.has(item.path)) {
         selectedPaths.clear();
         selectedPaths.add(item.path);
-        lastClickedIndex = idx;
         updateSelectionUI();
       }
       if (selectedPaths.size > 1) {
@@ -799,6 +787,90 @@ document.addEventListener('mouseup', () => {
     divider.classList.remove('dragging');
     document.body.style.cursor = '';
   }
+});
+
+// ── Rubber-band lasso selection ──
+let lasso = null;
+let lassoStartX = 0;
+let lassoStartY = 0;
+let lassoPreSelection = new Set(); // paths selected before lasso started
+
+fileTree.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (e.target.closest('.btn-overflow')) return;
+
+  const isModifier = e.metaKey || e.ctrlKey || e.shiftKey;
+  const onItem = e.target !== fileTree && e.target.closest('li');
+
+  // On an item without modifier — let the click handler deal with it, no lasso
+  if (onItem && !isModifier) return;
+
+  // Preserve current selection when modifier is held
+  lassoPreSelection = isModifier ? new Set(selectedPaths) : new Set();
+
+  lassoStartX = e.clientX;
+  lassoStartY = e.clientY;
+  let lassoActive = false;
+
+  const DEAD_ZONE = 5; // pixels before lasso activates
+
+  const onMouseMove = (ev) => {
+    const dx = Math.abs(ev.clientX - lassoStartX);
+    const dy = Math.abs(ev.clientY - lassoStartY);
+
+    // Don't start lasso until mouse has moved past dead zone
+    if (!lassoActive && dx < DEAD_ZONE && dy < DEAD_ZONE) return;
+
+    if (!lassoActive) {
+      lassoActive = true;
+      lasso = document.createElement('div');
+      lasso.className = 'lasso';
+      document.body.appendChild(lasso);
+    }
+
+    const x = Math.min(lassoStartX, ev.clientX);
+    const y = Math.min(lassoStartY, ev.clientY);
+    const w = Math.abs(ev.clientX - lassoStartX);
+    const h = Math.abs(ev.clientY - lassoStartY);
+    lasso.style.left = x + 'px';
+    lasso.style.top = y + 'px';
+    lasso.style.width = w + 'px';
+    lasso.style.height = h + 'px';
+
+    // Determine which items intersect the lasso rect
+    const lassoRect = { left: x, top: y, right: x + w, bottom: y + h };
+    selectedPaths = new Set(lassoPreSelection);
+
+    const lis = fileTree.querySelectorAll('li');
+    lis.forEach((li) => {
+      const name = li.querySelector('.name')?.textContent;
+      if (!name || name === '..') return;
+      const item = sortedItems.find((it) => it.name === name);
+      if (!item) return;
+
+      const liRect = li.getBoundingClientRect();
+      if (liRect.bottom > lassoRect.top && liRect.top < lassoRect.bottom &&
+          liRect.right > lassoRect.left && liRect.left < lassoRect.right) {
+        selectedPaths.add(item.path);
+      }
+    });
+    updateSelectionUI();
+  };
+
+  const onMouseUp = () => {
+    if (lasso) {
+      lasso.remove();
+      lasso = null;
+    }
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  };
+
+  // Only prevent default on empty space (let clicks on items still fire)
+  if (!onItem) e.preventDefault();
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
 });
 
 // ── Toast notifications ──

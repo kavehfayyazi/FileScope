@@ -732,6 +732,16 @@ html, body {
   margin: 4px 8px;
 }
 
+/* Lasso / rubber-band selection */
+.lasso {
+  position: fixed;
+  border: 1px solid var(--accent);
+  background: rgba(137, 180, 250, 0.12);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 999;
+}
+
 /* Toast */
 .toast {
   position: fixed;
