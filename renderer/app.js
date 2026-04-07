@@ -579,7 +579,13 @@ document.getElementById('action-deselect').addEventListener('click', () => {
 // ── Delete ──
 async function deleteItem(filePath) {
   const name = filePath.split('/').pop();
-  if (!confirm(`Move "${name}" to Trash?`)) return;
+  const isDir = sortedItems.find((it) => it.path === filePath)?.isDirectory;
+  if (isDir) {
+    if (!confirm(`"${name}" is a folder. Move it and all its contents to Trash?`)) return;
+    if (!confirm(`Are you sure? This will delete the entire "${name}" folder.`)) return;
+  } else {
+    if (!confirm(`Move "${name}" to Trash?`)) return;
+  }
   const result = await api.deleteFile(filePath);
   if (result.success) {
     toast('Moved to Trash', 'success');
@@ -604,7 +610,14 @@ async function moveItem(filePath) {
 
 // ── Bulk Delete ──
 async function deleteItems(paths) {
-  if (!confirm(`Move ${paths.length} items to Trash?`)) return;
+  const folders = paths.filter((p) => sortedItems.find((it) => it.path === p)?.isDirectory);
+  if (folders.length > 0) {
+    const folderNames = folders.map((p) => p.split('/').pop()).join(', ');
+    if (!confirm(`${paths.length} items selected (includes ${folders.length} folder${folders.length > 1 ? 's' : ''}: ${folderNames}). Move all to Trash?`)) return;
+    if (!confirm(`Are you sure? Folders and all their contents will be deleted.`)) return;
+  } else {
+    if (!confirm(`Move ${paths.length} items to Trash?`)) return;
+  }
   const results = await api.deleteFiles(paths);
   const ok = results.filter((r) => r.success).length;
   const fail = results.filter((r) => !r.success).length;
@@ -829,6 +842,17 @@ document.addEventListener('keydown', (e) => {
       selectedPaths.add(item.path);
     }
     updateSelectionUI();
+  }
+  // Cmd/Ctrl+Backspace or Cmd/Ctrl+Delete — delete selected
+  if ((e.metaKey || e.ctrlKey) && (e.key === 'Backspace' || e.key === 'Delete')) {
+    e.preventDefault();
+    if (selectedPaths.size > 1) {
+      deleteItems([...selectedPaths]);
+    } else if (selectedPaths.size === 1) {
+      deleteItem([...selectedPaths][0]);
+    } else if (selectedPath) {
+      deleteItem(selectedPath);
+    }
   }
   // Escape — deselect all
   if (e.key === 'Escape') {
