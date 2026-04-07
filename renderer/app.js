@@ -59,8 +59,8 @@ function sortItems(items) {
   const sorted = [...items];
   sorted.sort((a, b) => {
     if (ff) {
-      if (a.isDirectory && !b.isDirectory) return -1;
-      if (!a.isDirectory && b.isDirectory) return 1;
+      if (a.isDirectory && !b.isDirectory) return -1 * dir;
+      if (!a.isDirectory && b.isDirectory) return 1 * dir;
     }
     let cmp = 0;
     switch (category) {
@@ -70,7 +70,9 @@ function sortItems(items) {
       case 'type': {
         const extA = a.name.includes('.') ? a.name.split('.').pop().toLowerCase() : '';
         const extB = b.name.includes('.') ? b.name.split('.').pop().toLowerCase() : '';
-        cmp = extA.localeCompare(extB) || a.name.localeCompare(b.name);
+        cmp = extA.localeCompare(extB);
+        // Same extension — sort alphabetically within group (always A-Z)
+        if (cmp === 0) return a.name.localeCompare(b.name);
         break;
       }
       case 'size':
