@@ -356,6 +356,10 @@ async function selectFile(filePath, li) {
       viewerContent.innerHTML = `${header}${renderFont(result.data, fileName)}`;
       break;
 
+    case 'docx':
+      viewerContent.innerHTML = `${header}<div class="markdown-viewer">${result.data}</div>`;
+      break;
+
     case 'office':
       viewerContent.innerHTML = `${header}
         <div class="office-viewer">

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const mammoth = require('mammoth');
 
 let mainWindow;
 
@@ -132,7 +133,8 @@ ipcMain.handle('read-file', async (_event, filePath) => {
     const jsonExts = ['.json', '.jsonc', '.geojson'];
     const svgExts = ['.svg'];
     const fontExts = ['.ttf', '.otf', '.woff', '.woff2'];
-    const officeExts = ['.docx', '.xlsx', '.pptx', '.doc', '.xls', '.ppt', '.odt', '.ods'];
+    const docxExts = ['.docx'];
+    const officeExts = ['.xlsx', '.pptx', '.doc', '.xls', '.ppt', '.odt', '.ods'];
     const codeExts = [
       '.js', '.ts', '.jsx', '.tsx', '.py', '.rb', '.go', '.rs', '.c', '.cpp', '.h', '.hpp',
       '.java', '.swift', '.sh', '.bash', '.zsh', '.sql', '.css', '.scss', '.less',
@@ -170,6 +172,15 @@ ipcMain.handle('read-file', async (_event, filePath) => {
       const data = await fs.promises.readFile(filePath);
       const mimeMap = { '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2' };
       return { type: 'font', data: `data:${mimeMap[ext]};base64,${data.toString('base64')}`, size: stat.size };
+    }
+
+    if (docxExts.includes(ext)) {
+      try {
+        const result = await mammoth.convertToHtml({ path: filePath });
+        return { type: 'docx', data: result.value, size: stat.size };
+      } catch (err) {
+        return { type: 'error', data: `Failed to read docx: ${err.message}`, size: stat.size };
+      }
     }
 
     if (officeExts.includes(ext)) {
