@@ -15,6 +15,7 @@ const viewerActions = document.getElementById('viewer-actions');
 const divider = document.getElementById('divider');
 const sidebar = document.getElementById('sidebar');
 const sortSelect = document.getElementById('sort-select');
+const sortDirBtn = document.getElementById('sort-direction');
 const foldersFirstCheckbox = document.getElementById('folders-first');
 
 let rootDir = null;
@@ -41,12 +42,20 @@ btnOpen.addEventListener('click', async () => {
 });
 
 // ── Sorting ──
+let sortAscending = true;
+
 sortSelect.addEventListener('change', () => renderSorted());
 foldersFirstCheckbox.addEventListener('change', () => renderSorted());
+sortDirBtn.addEventListener('click', () => {
+  sortAscending = !sortAscending;
+  sortDirBtn.textContent = sortAscending ? '↑' : '↓';
+  renderSorted();
+});
 
 function sortItems(items) {
-  const mode = sortSelect.value;
+  const category = sortSelect.value;
   const ff = foldersFirstCheckbox.checked;
+  const dir = sortAscending ? 1 : -1;
 
   const sorted = [...items];
   sorted.sort((a, b) => {
@@ -54,27 +63,25 @@ function sortItems(items) {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
     }
-    switch (mode) {
-      case 'name-asc':
-        return a.name.localeCompare(b.name);
-      case 'name-desc':
-        return b.name.localeCompare(a.name);
+    let cmp = 0;
+    switch (category) {
+      case 'name':
+        cmp = a.name.localeCompare(b.name);
+        break;
       case 'type': {
         const extA = a.name.includes('.') ? a.name.split('.').pop().toLowerCase() : '';
         const extB = b.name.includes('.') ? b.name.split('.').pop().toLowerCase() : '';
-        return extA.localeCompare(extB) || a.name.localeCompare(b.name);
+        cmp = extA.localeCompare(extB) || a.name.localeCompare(b.name);
+        break;
       }
-      case 'size-asc':
-        return a.size - b.size;
-      case 'size-desc':
-        return b.size - a.size;
-      case 'date-desc':
-        return b.mtime - a.mtime;
-      case 'date-asc':
-        return a.mtime - b.mtime;
-      default:
-        return 0;
+      case 'size':
+        cmp = a.size - b.size;
+        break;
+      case 'date':
+        cmp = a.mtime - b.mtime;
+        break;
     }
+    return cmp * dir;
   });
   return sorted;
 }
