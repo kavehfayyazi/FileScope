@@ -19,8 +19,11 @@ const foldersFirstCheckbox = document.getElementById('folders-first');
 
 let rootDir = null;
 let currentDir = null;
-let selectedPath = null;
-let cachedItems = []; // cached directory listing for re-sorting
+let selectedPath = null;       // single file shown in viewer
+let selectedPaths = new Set();  // multi-select set
+let lastClickedIndex = -1;     // for shift-click range selection
+let cachedItems = [];           // cached directory listing for re-sorting
+let sortedItems = [];           // current sorted view (for shift-click indexing)
 let fontCounter = 0;
 
 // PDF state
@@ -77,7 +80,8 @@ function sortItems(items) {
 }
 
 function renderSorted() {
-  renderTree(sortItems(cachedItems));
+  sortedItems = sortItems(cachedItems);
+  renderTree(sortedItems);
 }
 
 // ── Navigate to directory ──
@@ -85,8 +89,9 @@ async function navigateTo(dirPath) {
   currentDir = dirPath;
   const items = await api.readDirectory(dirPath);
   cachedItems = items;
+  sortedItems = sortItems(items);
   renderBreadcrumbs(dirPath);
-  renderTree(sortItems(items));
+  renderTree(sortedItems);
   folderName.textContent = dirPath.split('/').pop() || dirPath;
 }
 
@@ -139,8 +144,10 @@ function renderTree(items) {
     fileTree.appendChild(li);
   }
 
-  for (const item of items) {
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx];
     const li = document.createElement('li');
+    if (selectedPaths.has(item.path)) li.classList.add('selected');
     if (item.path === selectedPath) li.classList.add('active');
 
     const icon = item.isDirectory ? '📁' : getFileIcon(item.name);
@@ -153,12 +160,46 @@ function renderTree(items) {
       <button class="btn-overflow" title="Actions">⋯</button>
     `;
 
-    // Click to open
+    // Click handling with multi-select
     li.addEventListener('click', (e) => {
       if (e.target.closest('.btn-overflow')) return;
-      if (item.isDirectory) {
+
+      const isMeta = e.metaKey || e.ctrlKey;
+      const isShift = e.shiftKey;
+
+      if (item.isDirectory && !isMeta && !isShift) {
+        selectedPaths.clear();
+        updateSelectionUI();
         navigateTo(item.path);
+        return;
+      }
+
+      if (isShift && lastClickedIndex >= 0) {
+        // Range select
+        const start = Math.min(lastClickedIndex, idx);
+        const end = Math.max(lastClickedIndex, idx);
+        if (!isMeta) selectedPaths.clear();
+        for (let i = start; i <= end; i++) {
+          selectedPaths.add(items[i].path);
+        }
+      } else if (isMeta) {
+        // Toggle single item
+        if (selectedPaths.has(item.path)) {
+          selectedPaths.delete(item.path);
+        } else {
+          selectedPaths.add(item.path);
+        }
       } else {
+        // Normal click — single select
+        selectedPaths.clear();
+        selectedPaths.add(item.path);
+      }
+
+      lastClickedIndex = idx;
+      updateSelectionUI();
+
+      // Preview the last clicked file (if not a directory)
+      if (!item.isDirectory) {
         selectFile(item.path, li);
       }
     });
@@ -166,17 +207,63 @@ function renderTree(items) {
     // Right-click context menu
     li.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      showContextMenu(e.clientX, e.clientY, item);
+      // If right-clicking an unselected item, select just that one
+      if (!selectedPaths.has(item.path)) {
+        selectedPaths.clear();
+        selectedPaths.add(item.path);
+        lastClickedIndex = idx;
+        updateSelectionUI();
+      }
+      if (selectedPaths.size > 1) {
+        showMultiContextMenu(e.clientX, e.clientY);
+      } else {
+        showContextMenu(e.clientX, e.clientY, item);
+      }
     });
 
     // Overflow button
     li.querySelector('.btn-overflow').addEventListener('click', (e) => {
       e.stopPropagation();
       const rect = e.target.getBoundingClientRect();
-      showContextMenu(rect.right, rect.bottom, item);
+      if (selectedPaths.size > 1 && selectedPaths.has(item.path)) {
+        showMultiContextMenu(rect.right, rect.bottom);
+      } else {
+        showContextMenu(rect.right, rect.bottom, item);
+      }
     });
 
     fileTree.appendChild(li);
+  }
+}
+
+// ── Selection UI update ──
+function updateSelectionUI() {
+  // Update .selected class on tree items
+  const lis = fileTree.querySelectorAll('li');
+  lis.forEach((li) => {
+    const name = li.querySelector('.name')?.textContent;
+    if (!name) return;
+    // Find the item by matching — we need the path
+    const item = sortedItems.find((it) => it.name === name);
+    if (item && selectedPaths.has(item.path)) {
+      li.classList.add('selected');
+    } else {
+      li.classList.remove('selected');
+    }
+  });
+
+  const count = selectedPaths.size;
+  const countEl = document.getElementById('selection-count');
+  const deselectBtn = document.getElementById('action-deselect');
+
+  if (count > 1) {
+    countEl.textContent = `${count} selected`;
+    countEl.classList.remove('hidden');
+    deselectBtn.classList.remove('hidden');
+    viewerActions.classList.remove('hidden');
+  } else {
+    countEl.classList.add('hidden');
+    deselectBtn.classList.add('hidden');
   }
 }
 
@@ -438,25 +525,55 @@ function renderFont(dataUrl, fileName) {
 
 // ── Viewer Action Bar ──
 document.getElementById('action-open').addEventListener('click', () => {
-  if (selectedPath) api.openInDefaultApp(selectedPath);
+  if (selectedPaths.size > 1) {
+    for (const p of selectedPaths) api.openInDefaultApp(p);
+  } else if (selectedPath) {
+    api.openInDefaultApp(selectedPath);
+  }
 });
 document.getElementById('action-finder').addEventListener('click', () => {
   if (selectedPath) api.showInFinder(selectedPath);
 });
 document.getElementById('action-copy-path').addEventListener('click', async () => {
-  if (selectedPath) {
+  if (selectedPaths.size > 1) {
+    await api.copyPath([...selectedPaths].join('\n'));
+    toast(`${selectedPaths.size} paths copied`, 'success');
+  } else if (selectedPath) {
     await api.copyPath(selectedPath);
     toast('Path copied', 'success');
   }
 });
 document.getElementById('action-rename').addEventListener('click', () => {
-  if (selectedPath) renameItem(selectedPath);
+  if (selectedPaths.size > 1) {
+    toast('Rename works on single files only', 'error');
+  } else if (selectedPath) {
+    renameItem(selectedPath);
+  }
 });
 document.getElementById('action-move').addEventListener('click', () => {
-  if (selectedPath) moveItem(selectedPath);
+  if (selectedPaths.size > 1) {
+    moveItems([...selectedPaths]);
+  } else if (selectedPath) {
+    moveItem(selectedPath);
+  }
 });
 document.getElementById('action-delete').addEventListener('click', () => {
-  if (selectedPath) deleteItem(selectedPath);
+  if (selectedPaths.size > 1) {
+    deleteItems([...selectedPaths]);
+  } else if (selectedPath) {
+    deleteItem(selectedPath);
+  }
+});
+document.getElementById('action-select-all').addEventListener('click', () => {
+  for (const item of sortedItems) {
+    if (!item.isDirectory) selectedPaths.add(item.path);
+  }
+  updateSelectionUI();
+});
+document.getElementById('action-deselect').addEventListener('click', () => {
+  selectedPaths.clear();
+  updateSelectionUI();
+  clearViewer();
 });
 
 // ── Delete ──
@@ -479,6 +596,35 @@ async function moveItem(filePath) {
   if (result.success) {
     toast('File moved', 'success');
     if (filePath === selectedPath) clearViewer();
+    await navigateTo(currentDir);
+  } else if (result.error !== 'canceled') {
+    toast(`Move failed: ${result.error}`, 'error');
+  }
+}
+
+// ── Bulk Delete ──
+async function deleteItems(paths) {
+  if (!confirm(`Move ${paths.length} items to Trash?`)) return;
+  const results = await api.deleteFiles(paths);
+  const ok = results.filter((r) => r.success).length;
+  const fail = results.filter((r) => !r.success).length;
+  if (ok > 0) toast(`${ok} item${ok > 1 ? 's' : ''} moved to Trash`, 'success');
+  if (fail > 0) toast(`${fail} item${fail > 1 ? 's' : ''} failed to delete`, 'error');
+  selectedPaths.clear();
+  clearViewer();
+  await navigateTo(currentDir);
+}
+
+// ── Bulk Move ──
+async function moveItems(paths) {
+  const result = await api.moveFiles(paths);
+  if (result.success) {
+    const ok = result.results.filter((r) => r.success).length;
+    const fail = result.results.filter((r) => !r.success).length;
+    if (ok > 0) toast(`${ok} item${ok > 1 ? 's' : ''} moved`, 'success');
+    if (fail > 0) toast(`${fail} item${fail > 1 ? 's' : ''} failed to move`, 'error');
+    selectedPaths.clear();
+    clearViewer();
     await navigateTo(currentDir);
   } else if (result.error !== 'canceled') {
     toast(`Move failed: ${result.error}`, 'error');
@@ -510,6 +656,8 @@ function clearViewer() {
   viewerContent.classList.add('hidden');
   viewerActions.classList.add('hidden');
   viewerEmpty.style.display = '';
+  document.getElementById('selection-count').classList.add('hidden');
+  document.getElementById('action-deselect').classList.add('hidden');
 }
 
 // ── Context menu ──
@@ -552,6 +700,49 @@ function showContextMenu(x, y, item) {
   if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
   if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
 
+  setTimeout(() => {
+    document.addEventListener('click', removeContextMenu, { once: true });
+  }, 0);
+}
+
+// ── Multi-select context menu ──
+function showMultiContextMenu(x, y) {
+  removeContextMenu();
+  const paths = [...selectedPaths];
+  const count = paths.length;
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+
+  const actions = [
+    { label: `Move ${count} items to…`, action: () => moveItems(paths) },
+    { label: `Copy ${count} paths`, action: async () => {
+      await api.copyPath(paths.join('\n'));
+      toast(`${count} paths copied`, 'success');
+    }},
+    { separator: true },
+    { label: `Delete ${count} items`, action: () => deleteItems(paths), danger: true },
+  ];
+
+  for (const a of actions) {
+    if (a.separator) {
+      const sep = document.createElement('div');
+      sep.className = 'context-separator';
+      menu.appendChild(sep);
+      continue;
+    }
+    const btn = document.createElement('button');
+    btn.textContent = a.label;
+    if (a.danger) btn.className = 'danger';
+    btn.addEventListener('click', () => { removeContextMenu(); a.action(); });
+    menu.appendChild(btn);
+  }
+
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+  if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
   setTimeout(() => {
     document.addEventListener('click', removeContextMenu, { once: true });
   }, 0);
@@ -628,6 +819,24 @@ function getFileIcon(name) {
   };
   return icons[ext] || '📄';
 }
+
+// ── Keyboard shortcuts ──
+document.addEventListener('keydown', (e) => {
+  // Cmd/Ctrl+A — select all files
+  if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+    e.preventDefault();
+    for (const item of sortedItems) {
+      selectedPaths.add(item.path);
+    }
+    updateSelectionUI();
+  }
+  // Escape — deselect all
+  if (e.key === 'Escape') {
+    selectedPaths.clear();
+    updateSelectionUI();
+    clearViewer();
+  }
+});
 
 // ── Start with home directory ──
 const home = await api.getHomeDir();

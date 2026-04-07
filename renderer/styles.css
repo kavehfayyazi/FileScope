@@ -164,6 +164,15 @@ html, body {
   border-left: 3px solid var(--accent);
   padding-left: 11px;
 }
+#file-tree li.selected {
+  background: rgba(137, 180, 250, 0.1);
+  border-left: 3px solid rgba(137, 180, 250, 0.4);
+  padding-left: 11px;
+}
+#file-tree li.selected.active {
+  background: rgba(137, 180, 250, 0.18);
+  border-left: 3px solid var(--accent);
+}
 
 #file-tree li .icon {
   flex-shrink: 0;
@@ -269,6 +278,19 @@ html, body {
 #viewer-actions button.danger:hover {
   background: rgba(243, 139, 168, 0.15);
   border-color: var(--danger);
+}
+
+#selection-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(137, 180, 250, 0.12);
+  padding: 4px 10px;
+  border-radius: 12px;
+  margin-right: 4px;
+}
+#selection-count.hidden {
+  display: none;
 }
 
 #viewer-content {

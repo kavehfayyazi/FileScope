@@ -44,12 +44,15 @@
         <p>Select a file to preview</p>
       </div>
       <div id="viewer-actions" class="hidden">
+        <span id="selection-count" class="hidden"></span>
         <button id="action-open" title="Open in default application">Open Externally</button>
         <button id="action-finder" title="Reveal in Finder">Show in Finder</button>
         <button id="action-copy-path" title="Copy file path to clipboard">Copy Path</button>
         <button id="action-rename" title="Rename this file">Rename</button>
         <button id="action-move" title="Move to another folder">Move</button>
         <button id="action-delete" class="danger" title="Move to Trash">Delete</button>
+        <button id="action-select-all" title="Select all files">Select All</button>
+        <button id="action-deselect" class="hidden" title="Clear selection">Deselect</button>
       </div>
       <div id="viewer-content" class="hidden"></div>
     </main>

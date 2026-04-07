@@ -182,6 +182,19 @@ ipcMain.handle('delete-file', async (_event, filePath) => {
   }
 });
 
+ipcMain.handle('delete-files', async (_event, filePaths) => {
+  const results = [];
+  for (const fp of filePaths) {
+    try {
+      await shell.trashItem(fp);
+      results.push({ path: fp, success: true });
+    } catch (err) {
+      results.push({ path: fp, success: false, error: err.message });
+    }
+  }
+  return results;
+});
+
 ipcMain.handle('move-file', async (_event, srcPath) => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
@@ -195,6 +208,26 @@ ipcMain.handle('move-file', async (_event, srcPath) => {
   } catch (err) {
     return { success: false, error: err.message };
   }
+});
+
+ipcMain.handle('move-files', async (_event, srcPaths) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+    title: `Move ${srcPaths.length} items to…`,
+  });
+  if (result.canceled) return { success: false, error: 'canceled' };
+  const destDir = result.filePaths[0];
+  const results = [];
+  for (const src of srcPaths) {
+    const dest = path.join(destDir, path.basename(src));
+    try {
+      await fs.promises.rename(src, dest);
+      results.push({ path: src, success: true, newPath: dest });
+    } catch (err) {
+      results.push({ path: src, success: false, error: err.message });
+    }
+  }
+  return { success: true, results };
 });
 
 ipcMain.handle('rename-file', async (_event, filePath, newName) => {
