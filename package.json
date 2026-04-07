@@ -1,0 +1,42 @@
+{
+  "name": "filescope",
+  "version": "1.0.0",
+  "description": "A desktop file viewer with directory browser, file preview, and file management",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.filescope.app",
+    "productName": "FileScope",
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ]
+  },
+  "keywords": [
+    "file-viewer",
+    "file-manager",
+    "electron"
+  ],
+  "author": "Kaveh Fayyazi",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^41.1.1",
+    "electron-builder": "^26.8.1"
+  }
+}
