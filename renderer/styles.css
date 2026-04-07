@@ -674,7 +674,9 @@ html, body {
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
 .context-menu button {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
   text-align: left;
   background: none;
@@ -684,6 +686,7 @@ html, body {
   font-size: 13px;
   cursor: pointer;
   border-radius: 6px;
+  gap: 20px;
 }
 .context-menu button:hover {
   background: var(--hover);
@@ -693,6 +696,15 @@ html, body {
 }
 .context-menu button.danger:hover {
   background: rgba(243, 139, 168, 0.1);
+}
+.ctx-label {
+  flex: 1;
+}
+.ctx-shortcut {
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 .context-separator {
   height: 1px;

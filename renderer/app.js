@@ -681,17 +681,28 @@ function showContextMenu(x, y, item) {
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
 
+  const mod = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+';
   const actions = [
-    { label: 'Open in Default App', action: () => api.openInDefaultApp(item.path) },
-    { label: 'Show in Finder', action: () => api.showInFinder(item.path) },
+    { label: 'Open in Default App', shortcut: `${mod}⇧O`, action: () => api.openInDefaultApp(item.path) },
+    { label: 'Show in Finder', shortcut: `${mod}⇧F`, action: () => api.showInFinder(item.path) },
     { separator: true },
-    { label: 'Rename', action: () => renameItem(item.path) },
-    { label: 'Copy Path', action: async () => { await api.copyPath(item.path); toast('Path copied', 'success'); } },
-    { label: 'Move to…', action: () => moveItem(item.path) },
+    { label: 'Rename', shortcut: `${mod}⇧R`, action: () => renameItem(item.path) },
+    { label: 'Copy Path', shortcut: `${mod}⇧C`, action: async () => { await api.copyPath(item.path); toast('Path copied', 'success'); } },
+    { label: 'Move to…', shortcut: `${mod}M`, action: () => moveItem(item.path) },
     { separator: true },
-    { label: 'Delete', action: () => deleteItem(item.path), danger: true },
+    { label: 'Delete', shortcut: `${mod}⌫`, action: () => deleteItem(item.path), danger: true },
   ];
 
+  buildContextMenuItems(menu, actions);
+
+  document.body.appendChild(menu);
+  adjustMenuPosition(menu);
+  setTimeout(() => {
+    document.addEventListener('click', removeContextMenu, { once: true });
+  }, 0);
+}
+
+function buildContextMenuItems(menu, actions) {
   for (const a of actions) {
     if (a.separator) {
       const sep = document.createElement('div');
@@ -700,22 +711,29 @@ function showContextMenu(x, y, item) {
       continue;
     }
     const btn = document.createElement('button');
-    btn.textContent = a.label;
     if (a.danger) btn.className = 'danger';
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'ctx-label';
+    labelSpan.textContent = a.label;
+    btn.appendChild(labelSpan);
+
+    if (a.shortcut) {
+      const shortcutSpan = document.createElement('span');
+      shortcutSpan.className = 'ctx-shortcut';
+      shortcutSpan.textContent = a.shortcut;
+      btn.appendChild(shortcutSpan);
+    }
+
     btn.addEventListener('click', () => { removeContextMenu(); a.action(); });
     menu.appendChild(btn);
   }
+}
 
-  document.body.appendChild(menu);
-
-  // Adjust if off-screen
+function adjustMenuPosition(menu) {
   const rect = menu.getBoundingClientRect();
   if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
   if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
-
-  setTimeout(() => {
-    document.addEventListener('click', removeContextMenu, { once: true });
-  }, 0);
 }
 
 // ── Multi-select context menu ──
@@ -723,39 +741,25 @@ function showMultiContextMenu(x, y) {
   removeContextMenu();
   const paths = [...selectedPaths];
   const count = paths.length;
+  const mod = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+';
   const menu = document.createElement('div');
   menu.className = 'context-menu';
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
 
   const actions = [
-    { label: `Move ${count} items to…`, action: () => moveItems(paths) },
-    { label: `Copy ${count} paths`, action: async () => {
+    { label: `Move ${count} items to…`, shortcut: `${mod}M`, action: () => moveItems(paths) },
+    { label: `Copy ${count} paths`, shortcut: `${mod}⇧C`, action: async () => {
       await api.copyPath(paths.join('\n'));
       toast(`${count} paths copied`, 'success');
     }},
     { separator: true },
-    { label: `Delete ${count} items`, action: () => deleteItems(paths), danger: true },
+    { label: `Delete ${count} items`, shortcut: `${mod}⌫`, action: () => deleteItems(paths), danger: true },
   ];
 
-  for (const a of actions) {
-    if (a.separator) {
-      const sep = document.createElement('div');
-      sep.className = 'context-separator';
-      menu.appendChild(sep);
-      continue;
-    }
-    const btn = document.createElement('button');
-    btn.textContent = a.label;
-    if (a.danger) btn.className = 'danger';
-    btn.addEventListener('click', () => { removeContextMenu(); a.action(); });
-    menu.appendChild(btn);
-  }
-
+  buildContextMenuItems(menu, actions);
   document.body.appendChild(menu);
-  const rect = menu.getBoundingClientRect();
-  if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
-  if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+  adjustMenuPosition(menu);
   setTimeout(() => {
     document.addEventListener('click', removeContextMenu, { once: true });
   }, 0);
@@ -833,32 +837,53 @@ function getFileIcon(name) {
   return icons[ext] || '📄';
 }
 
-// ── Keyboard shortcuts ──
-document.addEventListener('keydown', (e) => {
-  // Cmd/Ctrl+A — select all files
-  if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
-    e.preventDefault();
-    for (const item of sortedItems) {
-      selectedPaths.add(item.path);
-    }
-    updateSelectionUI();
-  }
-  // Cmd/Ctrl+Backspace or Cmd/Ctrl+Delete — delete selected
-  if ((e.metaKey || e.ctrlKey) && (e.key === 'Backspace' || e.key === 'Delete')) {
-    e.preventDefault();
-    if (selectedPaths.size > 1) {
-      deleteItems([...selectedPaths]);
-    } else if (selectedPaths.size === 1) {
-      deleteItem([...selectedPaths][0]);
-    } else if (selectedPath) {
-      deleteItem(selectedPath);
-    }
-  }
-  // Escape — deselect all
-  if (e.key === 'Escape') {
-    selectedPaths.clear();
-    updateSelectionUI();
-    clearViewer();
+// ── Keyboard shortcuts (via Electron menu accelerators) ──
+function getActivePaths() {
+  if (selectedPaths.size > 0) return [...selectedPaths];
+  if (selectedPath) return [selectedPath];
+  return [];
+}
+
+api.onShortcut((action) => {
+  const paths = getActivePaths();
+
+  switch (action) {
+    case 'delete':
+      if (paths.length > 1) deleteItems(paths);
+      else if (paths.length === 1) deleteItem(paths[0]);
+      break;
+    case 'move':
+      if (paths.length > 1) moveItems(paths);
+      else if (paths.length === 1) moveItem(paths[0]);
+      break;
+    case 'rename':
+      if (paths.length === 1) renameItem(paths[0]);
+      else if (paths.length > 1) toast('Rename works on single files only', 'error');
+      break;
+    case 'copy-path':
+      if (paths.length > 0) {
+        api.copyPath(paths.join('\n'));
+        toast(paths.length > 1 ? `${paths.length} paths copied` : 'Path copied', 'success');
+      }
+      break;
+    case 'open-external':
+      for (const p of paths) api.openInDefaultApp(p);
+      break;
+    case 'show-in-finder':
+      if (paths.length > 0) api.showInFinder(paths[0]);
+      break;
+    case 'open-folder':
+      btnOpen.click();
+      break;
+    case 'select-all':
+      for (const item of sortedItems) selectedPaths.add(item.path);
+      updateSelectionUI();
+      break;
+    case 'deselect':
+      selectedPaths.clear();
+      updateSelectionUI();
+      clearViewer();
+      break;
   }
 });
 

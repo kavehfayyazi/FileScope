@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('fileScope', {
+  onShortcut: (callback) => ipcRenderer.on('shortcut', (_event, action) => callback(action)),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   readDirectory: (dirPath) => ipcRenderer.invoke('read-directory', dirPath),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),

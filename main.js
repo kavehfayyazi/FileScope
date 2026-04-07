@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -20,6 +20,51 @@ function createWindow() {
   });
 
   mainWindow.loadFile('renderer/index.html');
+
+  // App menu with keyboard shortcuts
+  const isMac = process.platform === 'darwin';
+  const template = [
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    {
+      label: 'File',
+      submenu: [
+        { label: 'Open Folder', accelerator: 'CmdOrCtrl+O', click: () => mainWindow.webContents.send('shortcut', 'open-folder') },
+        { type: 'separator' },
+        { label: 'Delete', accelerator: 'CmdOrCtrl+Backspace', click: () => mainWindow.webContents.send('shortcut', 'delete') },
+        { label: 'Move to…', accelerator: 'CmdOrCtrl+M', click: () => mainWindow.webContents.send('shortcut', 'move') },
+        { label: 'Rename', accelerator: 'CmdOrCtrl+Shift+R', click: () => mainWindow.webContents.send('shortcut', 'rename') },
+        { type: 'separator' },
+        { label: 'Copy Path', accelerator: 'CmdOrCtrl+Shift+C', click: () => mainWindow.webContents.send('shortcut', 'copy-path') },
+        { label: 'Open in Default App', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow.webContents.send('shortcut', 'open-external') },
+        { label: 'Show in Finder', accelerator: 'CmdOrCtrl+Shift+F', click: () => mainWindow.webContents.send('shortcut', 'show-in-finder') },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { label: 'Select All', accelerator: 'CmdOrCtrl+A', click: () => mainWindow.webContents.send('shortcut', 'select-all') },
+        { label: 'Deselect', accelerator: 'Escape', click: () => mainWindow.webContents.send('shortcut', 'deselect') },
+        { type: 'separator' },
+        { role: 'copy' },
+        { role: 'paste' },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { role: 'resetZoom' },
+      ],
+    },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 app.whenReady().then(createWindow);
